@@ -16,6 +16,10 @@ import com.google.api.services.gmail.model.MessagePart;
 import com.google.api.services.gmail.model.MessagePartBody;
 import com.google.common.collect.ImmutableList;
 import org.apache.commons.codec.binary.Base64;
+import com.google.api.services.gmail.model.ModifyMessageRequest;
+import com.google.api.services.gmail.model.Label;
+import com.google.api.services.gmail.model.ListLabelsResponse;
+
 
 import com.google.cloud.vision.v1.AnnotateImageRequest;
 import com.google.cloud.vision.v1.AnnotateImageResponse;
@@ -26,6 +30,8 @@ import com.google.cloud.vision.v1.Feature.Type;
 import com.google.cloud.vision.v1.Image;
 import com.google.cloud.vision.v1.ImageAnnotatorClient;
 import com.google.protobuf.ByteString;
+
+import java.lang.annotation.Annotation;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -42,14 +48,13 @@ public class GmailQuickstart {
     private static final String APPLICATION_NAME = "Gmail API Java Quickstart";
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
     private static final String TOKENS_DIRECTORY_PATH = "tokens";
-    private static final String IMAGES_TEMP_PATH = "tmp_images";
-
+    private static final String ANALYZED_PARENT_LABEL = "Auto-Analyzed Images";
 
     /**
      * Global instance of the scopes required by this quickstart.
      * If modifying these scopes, delete your previously saved tokens/ folder.
      */
-    private static final List<String> SCOPES = ImmutableList.of(GmailScopes.GMAIL_LABELS, GmailScopes.GMAIL_READONLY);
+    private static final List<String> SCOPES = ImmutableList.of(GmailScopes.GMAIL_LABELS, GmailScopes.GMAIL_MODIFY);
     private static final String CREDENTIALS_FILE_PATH = "/credentials.json";
 
     /**
@@ -101,33 +106,7 @@ public class GmailQuickstart {
                 break;
             }
         }
-/*
-        for (Message message : messages) {
-            System.out.println(message.toPrettyString());
-        }
-*/
         return messages;
-    }
-
-    public static void getAttachments(Gmail service, String userId, String messageId)
-            throws IOException {
-        Message message = service.users().messages().get(userId, messageId).execute();
-        List<MessagePart> parts = message.getPayload().getParts();
-        for (MessagePart part : parts) {
-            if (part.getFilename() != null && part.getFilename().length() > 0) {
-                String filename = part.getFilename();
-                String attId = part.getBody().getAttachmentId();
-                MessagePartBody attachPart = service.users().messages().attachments().
-                        get(userId, messageId, attId).execute();
-
-                Base64 base64Url = new Base64(true);
-                byte[] fileByteArray = base64Url.decodeBase64(attachPart.getData());
-                FileOutputStream fileOutFile =
-                        new FileOutputStream(IMAGES_TEMP_PATH+ "/" + filename);
-                fileOutFile.write(fileByteArray);
-                fileOutFile.close();
-            }
-        }
     }
 
     public static List<byte[]> getAttachmentsBytes(Gmail service, String userId, String messageId)
@@ -170,7 +149,8 @@ public class GmailQuickstart {
         BatchAnnotateImagesResponse response = vision.batchAnnotateImages(requests);
         List<AnnotateImageResponse> responses = response.getResponsesList();
 
-        //get first response (only sent in one image in the batch so should only be one response)
+        // get first response (only sent in one image in the batch so should only be one response)
+        // Possible to do is to handle emails with several image attachments.
         AnnotateImageResponse res = responses.get(0);
 
         if (res.hasError()) {
@@ -178,11 +158,106 @@ public class GmailQuickstart {
         }
 
         return res.getLabelAnnotationsList();
-
-
-
     }}
 
+
+    /**
+     * Modify the labels a message is associated with.
+     *
+     * @param service Authorized Gmail API instance.
+     * @param userId User's email address. The special value "me"
+     * can be used to indicate the authenticated user.
+     * @param messageId ID of Message to Modify.
+     * @param labelsToAdd List of label ids to add.
+     * @param labelsToRemove List of label ids to remove.
+     * @throws IOException
+     */
+    public static void modifyMessage(Gmail service, String userId, String messageId,
+                                     List<String> labelsToAdd, List<String> labelsToRemove) throws IOException {
+        ModifyMessageRequest mods = new ModifyMessageRequest().setAddLabelIds(labelsToAdd)
+                .setRemoveLabelIds(labelsToRemove);
+        Message message = service.users().messages().modify(userId, messageId, mods).execute();
+    }
+
+     /**
+     * List the Labels in the user's mailbox.
+     *
+     * @param service Authorized Gmail API instance.
+     * @param userId User's email address. The special value "me"
+     * can be used to indicate the authenticated user.
+     * @throws IOException
+     */
+    public static List<Label> listLabels(Gmail service, String userId) throws IOException {
+        ListLabelsResponse response = service.users().labels().list(userId).execute();
+        List<Label> labels = response.getLabels();
+
+        return labels;
+    }
+
+    /**
+     * Add a new Label to user's inbox.
+     *
+     * @param service Authorized Gmail API instance.
+     * @param userId User's email address. The special value "me"
+     * can be used to indicate the authenticated user.
+     * @param newLabelName Name of the new label.
+     * @throws IOException
+     */
+    public static Label createLabel(Gmail service, String userId, String newLabelName)
+            throws IOException {
+        Label label = new Label()
+                .setName(newLabelName)
+                .setLabelListVisibility("labelShow")
+                .setMessageListVisibility("show");
+
+        label = service.users().labels().create(userId, label).execute();
+
+        return label;
+    }
+
+
+    public static Label getLabelByName(Gmail service, String userId, String labelName) throws IOException {
+        // Get all labels in account
+        List<Label> labelsInAccount = listLabels(service, userId);
+        // See if the label name exists
+        for (Label label : labelsInAccount) {
+            if(label.getName().equals(labelName)){
+                return label;
+            }
+        }
+        // Label does not seem to exist? -> create the label
+        return createLabel(service, userId, labelName);
+    }
+
+    public static void labelEmailAndMarkAsProcessed(Gmail service, String userId, String emailId, String[] labelNamesToAddToEmail)
+            throws IOException {
+        List<String> labelIdsToAdd = new ArrayList<String>();
+
+        for (String labelNameToAdd : labelNamesToAddToEmail) {
+            // add labels as children under parent label
+            labelIdsToAdd.add(getLabelByName(service, userId,
+                    ANALYZED_PARENT_LABEL+"/"+labelNameToAdd).getId());
+        }
+
+        // always add the "analyzed parent label"
+        labelIdsToAdd.add(getLabelByName(service, userId, ANALYZED_PARENT_LABEL).getId());
+
+        modifyMessage(service, userId, emailId, labelIdsToAdd, null);
+    }
+
+    public static EntityAnnotation getHighestScoringAnnotation(List<EntityAnnotation> annotations){
+        double highestScore = 0;
+        EntityAnnotation highestScoredAnnotation = null;
+        if(!annotations.isEmpty()) {
+            for (EntityAnnotation annotation : annotations) {
+                if (annotation.getScore() > highestScore){
+                    highestScoredAnnotation = annotation;
+                    highestScore = annotation.getScore();
+                }
+            }
+        }
+        return highestScoredAnnotation;
+    }
 
     public static void main(String... args) throws IOException, GeneralSecurityException {
         // Build a new authorized API client service.
@@ -194,13 +269,21 @@ public class GmailQuickstart {
         // Print the labels in the user's account.
         String user = "me";
 
-
         // Find emails
-        List<Message> messages = listMessagesMatchingQuery(service, user, "subject:(Aktivitet vid din kamera) has:attachment after:2020/01/01 ");
+        String searchString = "Aktivitet vid din kamera";
+        int emailAgeInDays = 1;
 
-        // Process email
+        List<Message> messages = listMessagesMatchingQuery(service, user, "subject:("
+                .concat(searchString)
+                .concat(") has:attachment newer_than:")
+                .concat(String.valueOf(emailAgeInDays)).concat("d ")
+                .concat(" AND NOT label:\"").concat(ANALYZED_PARENT_LABEL).concat("\"")
+                );
+
+        System.out.println("Number of messages fetched: " + messages.size());
+        // Process emails
         for (Message message : messages) {
-            //System.out.println(message.toPrettyString());
+            System.out.println(message.toPrettyString());
             // download attachment
             System.out.println("Downloading attachment!");
             List<byte[]> imageByteArrays = getAttachmentsBytes(service, user, message.getId());
@@ -208,31 +291,13 @@ public class GmailQuickstart {
             for (byte[] imageByteArray:imageByteArrays) {
                 System.out.println("Analyzing attachment!");
                 // Analyze attachment (google vision)
-                // req to set env var. GOOGLE_APPLICATION_CREDENTIALS
-                for (EntityAnnotation annotation:AnnotateImageWithGoogleVision(imageByteArray)){
-                    annotation.getAllFields().forEach((k, v) ->
-                            System.out.printf("%s : %s\n", k, v.toString()));
-                }
+                // bryt isär i några steg så man fattar
+                String labelToAdd = getHighestScoringAnnotation(AnnotateImageWithGoogleVision(imageByteArray)).getDescription();
+                System.out.println("Looks like a... " + labelToAdd);
+                String[] addAsLabels = {labelToAdd};
+
+                labelEmailAndMarkAsProcessed(service, user, message.getId(), addAsLabels);
             }
-
-
-        // Tag email with results?
-        // tag that analyzed email is analyzed. Include this tag in the search string above to avoid
-        // duplicate analyzes
-
-        // fin!
-
         }
-
-        /*ListLabelsResponse listResponse = service.users().labels().list(user).execute();
-        List<Label> labels = listResponse.getLabels();
-        if (labels.isEmpty()) {
-            System.out.println("No labels found.");
-        } else {
-            System.out.println("Labels:");
-            for (Label label : labels) {
-                System.out.printf("- %s\n", label.getName());
-            }
-        }*/
     }
 }
