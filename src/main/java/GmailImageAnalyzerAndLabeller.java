@@ -265,6 +265,7 @@ public class GmailImageAnalyzerAndLabeller {
         // Find emails
         // this is the same search string as a search would result in gmail ui
         String gmailSearchString = "filename:PIC.jpg newer_than:2d";
+        //String gmailSearchString = "label:jaktkamera-rådjur";
 
         List<Message> messages = listMessagesMatchingQuery(service, user, gmailSearchString
                         .concat(" AND NOT label:\"").concat(ANALYZED_PARENT_LABEL).concat("\"")
@@ -273,7 +274,6 @@ public class GmailImageAnalyzerAndLabeller {
         System.out.println("Number of messages fetched: " + messages.size());
         // Process emails
         for (Message message : messages) {
-            System.out.println(message.toPrettyString());
             // download attachment
             System.out.println("Downloading attachment!");
             List<byte[]> imageByteArrays = getAttachmentsBytes(service, user, message.getId());
@@ -281,8 +281,15 @@ public class GmailImageAnalyzerAndLabeller {
             for (byte[] imageByteArray:imageByteArrays) {
                 System.out.println("Analyzing attachment!");
                 // Analyze attachment (google vision)
-                // bryt isär i några steg så man fattar
-                String labelToAdd = getHighestScoringAnnotation(AnnotateImageWithGoogleVision(imageByteArray)).getDescription();
+                List<EntityAnnotation> annotations = AnnotateImageWithGoogleVision(imageByteArray);
+                for(EntityAnnotation annotation : annotations) {
+                    System.out.println(annotation.toString());
+                }
+
+                // is any of the labels an animal!?
+                // check against the list of animals!
+
+                String labelToAdd = getHighestScoringAnnotation(annotations).getDescription();
                 System.out.println("Looks like a... " + labelToAdd);
                 String[] addAsLabels = {labelToAdd};
 
