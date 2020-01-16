@@ -154,7 +154,6 @@ public class GmailImageAnalyzerAndLabeller {
         return res.getLabelAnnotationsList();
     }}
 
-
     /**
      * Modify the labels a message is associated with.
      *
@@ -264,14 +263,11 @@ public class GmailImageAnalyzerAndLabeller {
         String user = "me";
 
         // Find emails
-        String searchString = "Aktivitet vid din kamera";
-        int emailAgeInDays = 1;
+        // this is the same search string as a search would result in gmail ui
+        String gmailSearchString = "filename:PIC.jpg newer_than:2d";
 
-        List<Message> messages = listMessagesMatchingQuery(service, user, "subject:("
-                .concat(searchString)
-                .concat(") has:attachment newer_than:")
-                .concat(String.valueOf(emailAgeInDays)).concat("d ")
-                .concat(" AND NOT label:\"").concat(ANALYZED_PARENT_LABEL).concat("\"")
+        List<Message> messages = listMessagesMatchingQuery(service, user, gmailSearchString
+                        .concat(" AND NOT label:\"").concat(ANALYZED_PARENT_LABEL).concat("\"")
                 );
 
         System.out.println("Number of messages fetched: " + messages.size());

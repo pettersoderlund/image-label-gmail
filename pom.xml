@@ -7,6 +7,7 @@
     <groupId>se.pettersoderlund</groupId>
     <artifactId>gmail-image-labelling</artifactId>
     <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
     <build>
         <plugins>
             <plugin>
@@ -17,9 +18,27 @@
                     <target>8</target>
                 </configuration>
             </plugin>
+            <!-- build executable standalone jar : mvn clean compile assembly:single -->
+            <plugin>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <configuration>
+                    <finalName>GmailImageAnalyzerAndLabeller</finalName>
+                    <archive>
+                        <manifest>
+                            <mainClass>GmailImageAnalyzerAndLabeller</mainClass>
+                        </manifest>
+                        <manifestEntries>
+                            <Implementation-Version>${project.version}</Implementation-Version>
+                        </manifestEntries>
+                    </archive>
+                    <descriptorRefs>
+                        <descriptorRef>jar-with-dependencies</descriptorRef>
+                    </descriptorRefs>
+                    <appendAssemblyId>false</appendAssemblyId>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
-
 
     <dependencyManagement>
         <dependencies>
@@ -33,13 +52,10 @@
         </dependencies>
     </dependencyManagement>
     <dependencies>
-
-
         <dependency>
             <groupId>com.google.cloud</groupId>
             <artifactId>google-cloud-vision</artifactId>
         </dependency>
-
         <dependency>
             <groupId>com.google.api-client</groupId>
             <artifactId>google-api-client</artifactId>
@@ -55,9 +71,5 @@
             <artifactId>google-api-services-gmail</artifactId>
             <version>v1-rev83-1.23.0</version>
         </dependency>
-
     </dependencies>
-
-
-
 </project>
