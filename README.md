@@ -34,3 +34,7 @@ Finished! the program should run.
 Make sure tokens folder is in the same dir as current dir. 
 
 $java -jar GmailImageAnalyzerAndLabeller.jar
+
+
+# List of animal names
+Stolen from https://en.wikipedia.org/wiki/List_of_animal_names

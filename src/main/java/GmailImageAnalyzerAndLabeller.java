@@ -50,6 +50,8 @@ public class GmailImageAnalyzerAndLabeller {
      */
     private static final List<String> SCOPES = ImmutableList.of(GmailScopes.GMAIL_LABELS, GmailScopes.GMAIL_MODIFY);
     private static final String CREDENTIALS_FILE_PATH = "/credentials.json";
+    private static final String ANIMALS_FILE_PATH = "animals.csv";
+
 
     /**
      * Creates an authorized Credential object.
@@ -222,7 +224,7 @@ public class GmailImageAnalyzerAndLabeller {
         return createLabel(service, userId, labelName);
     }
 
-    public static void labelEmailAndMarkAsProcessed(Gmail service, String userId, String emailId, String[] labelNamesToAddToEmail)
+    public static void labelEmailAndMarkAsProcessed(Gmail service, String userId, String emailId, List<String> labelNamesToAddToEmail)
             throws IOException {
         List<String> labelIdsToAdd = new ArrayList<String>();
 
@@ -252,6 +254,22 @@ public class GmailImageAnalyzerAndLabeller {
         return highestScoredAnnotation;
     }
 
+    public static List<String> getListOfAnimals() throws IOException {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        InputStream inputStream= classLoader.getResourceAsStream(ANIMALS_FILE_PATH);
+        Reader inputStreamReader = new InputStreamReader(inputStream);
+        BufferedReader csvReader = new BufferedReader(inputStreamReader);
+
+        List<String> animals = new ArrayList<String>();
+        String row = "";
+        while ((row = csvReader.readLine()) != null) {
+            animals.add(row.toLowerCase().trim());
+        }
+        csvReader.close();
+
+        return animals;
+    }
+
     public static void main(String... args) throws IOException, GeneralSecurityException {
         // Build a new authorized API client service.
         final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
@@ -264,8 +282,8 @@ public class GmailImageAnalyzerAndLabeller {
 
         // Find emails
         // this is the same search string as a search would result in gmail ui
-        String gmailSearchString = "filename:PIC.jpg newer_than:2d";
-        //String gmailSearchString = "label:jaktkamera-rådjur";
+        //String gmailSearchString = "filename:PIC.jpg newer_than:2d";
+        String gmailSearchString = "label:jaktkamera-rådjur ";
 
         List<Message> messages = listMessagesMatchingQuery(service, user, gmailSearchString
                         .concat(" AND NOT label:\"").concat(ANALYZED_PARENT_LABEL).concat("\"")
@@ -288,13 +306,38 @@ public class GmailImageAnalyzerAndLabeller {
 
                 // is any of the labels an animal!?
                 // check against the list of animals!
-
-                String labelToAdd = getHighestScoringAnnotation(annotations).getDescription();
-                System.out.println("Looks like a... " + labelToAdd);
-                String[] addAsLabels = {labelToAdd};
-
-                labelEmailAndMarkAsProcessed(service, user, message.getId(), addAsLabels);
+                List<String> animalLabels = new ArrayList<>();
+                List<EntityAnnotation> animalAnnotations = getAnimalAnnotations(annotations);
+                if(animalAnnotations!= null) {
+                    for (EntityAnnotation annotation: animalAnnotations){
+                        animalLabels.add(annotation.getDescription());
+                        System.out.println("Spotted a " + annotation.getDescription() +"!");
+                    }
+                    labelEmailAndMarkAsProcessed(service, user, message.getId(), animalLabels);
+                } else {
+                    // no animals found :(
+                    // take the highest scoring label
+                    List<String> labels = new ArrayList<>();
+                    labels.add(getHighestScoringAnnotation(annotations).getDescription());
+                    labelEmailAndMarkAsProcessed(service, user, message.getId(), labels);
+                }
             }
         }
+    }
+
+    private static List<EntityAnnotation> getAnimalAnnotations(List<EntityAnnotation> annotations) throws IOException {
+        List<EntityAnnotation> animalAnnotations = new ArrayList<>();
+
+        for(EntityAnnotation annotation : annotations) {
+            if(isAnimal(annotation.getDescription())){
+                animalAnnotations.add(annotation);
+            }
+        }
+        return animalAnnotations;
+    }
+
+    public static boolean isAnimal(String description) throws IOException {
+        List<String> animals = getListOfAnimals();
+        return animals.contains(description.toLowerCase().trim());
     }
 }
