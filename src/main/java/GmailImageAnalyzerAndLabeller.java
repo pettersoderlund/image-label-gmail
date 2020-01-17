@@ -282,8 +282,8 @@ public class GmailImageAnalyzerAndLabeller {
 
         // Find emails
         // this is the same search string as a search would result in gmail ui
-        //String gmailSearchString = "filename:PIC.jpg newer_than:2d";
-        String gmailSearchString = "label:jaktkamera-rådjur ";
+        String gmailSearchString = "filename:PIC.jpg newer_than:2d";
+
 
         List<Message> messages = listMessagesMatchingQuery(service, user, gmailSearchString
                         .concat(" AND NOT label:\"").concat(ANALYZED_PARENT_LABEL).concat("\"")
