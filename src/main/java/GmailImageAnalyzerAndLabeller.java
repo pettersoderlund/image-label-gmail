@@ -14,6 +14,7 @@ import com.google.api.services.gmail.model.ListMessagesResponse;
 import com.google.api.services.gmail.model.Message;
 import com.google.api.services.gmail.model.MessagePart;
 import com.google.api.services.gmail.model.MessagePartBody;
+import com.google.cloud.vision.v1.*;
 import com.google.common.collect.ImmutableList;
 import org.apache.commons.codec.binary.Base64;
 import com.google.api.services.gmail.model.ModifyMessageRequest;
@@ -21,18 +22,10 @@ import com.google.api.services.gmail.model.Label;
 import com.google.api.services.gmail.model.ListLabelsResponse;
 
 
-import com.google.cloud.vision.v1.AnnotateImageRequest;
-import com.google.cloud.vision.v1.AnnotateImageResponse;
-import com.google.cloud.vision.v1.BatchAnnotateImagesResponse;
-import com.google.cloud.vision.v1.EntityAnnotation;
-import com.google.cloud.vision.v1.Feature;
 import com.google.cloud.vision.v1.Feature.Type;
-import com.google.cloud.vision.v1.Image;
-import com.google.cloud.vision.v1.ImageAnnotatorClient;
 import com.google.protobuf.ByteString;
 
 import java.io.*;
-import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,7 +35,7 @@ public class GmailImageAnalyzerAndLabeller {
     private static final String APPLICATION_NAME = "Gmail API Java Quickstart";
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
     private static final String TOKENS_DIRECTORY_PATH = "tokens";
-    private static final String ANALYZED_PARENT_LABEL = "Auto-Analyzed Images";
+    private static final String ANALYZED_PARENT_LABEL = "Z";
 
     /**
      * Global instance of the scopes required by this quickstart.
@@ -125,8 +118,54 @@ public class GmailImageAnalyzerAndLabeller {
         }
         return attachmentImageByteArrays;
     }
+    /**
+     * Detects localized objects in the specified local image.
+     *
+     * @param imgByteArray
+     * @throws Exception on errors while closing the client.
+     * @throws IOException on Input/Output errors.
+     * @return List<EntityAnnotation> annotations of the analyzed image
+     */
+    public static List<LocalizedObjectAnnotation> detectLocalizedObjects(byte[] imgByteArray)
+            throws Exception, IOException {
+        List<AnnotateImageRequest> requests = new ArrayList<>();
 
-    public static List<EntityAnnotation> AnnotateImageWithGoogleVision(byte[] imgByteArray) throws IOException {
+        ByteString imgBytes = ByteString.copyFrom(imgByteArray);
+
+        Image img = Image.newBuilder().setContent(imgBytes).build();
+        AnnotateImageRequest request =
+                AnnotateImageRequest.newBuilder()
+                        .addFeatures(Feature.newBuilder().setType(Type.OBJECT_LOCALIZATION))
+                        .setImage(img)
+                        .build();
+        requests.add(request);
+
+        // Perform the request
+        try (ImageAnnotatorClient client = ImageAnnotatorClient.create()) {
+            BatchAnnotateImagesResponse response = client.batchAnnotateImages(requests);
+            List<AnnotateImageResponse> responses = response.getResponsesList();
+
+            // get first response (only sent in one image in the batch so should only be one response)
+            // Possible to do is to handle emails with several image attachments.
+            AnnotateImageResponse res = responses.get(0);
+
+            if (res.hasError()) {
+                System.out.printf("Error: %s\n", res.getError().getMessage());
+            }
+
+            // Display the results
+            for (AnnotateImageResponse resu : responses) {
+                for (LocalizedObjectAnnotation entity : resu.getLocalizedObjectAnnotationsList()) {
+                    System.out.println("Object name: " + entity.getName());
+                    System.out.println("Confidence: " + entity.getScore());
+                }
+            }
+
+            return res.getLocalizedObjectAnnotationsList();
+
+        }
+    }
+    public static List<EntityAnnotation> annotateImageWithGoogleVision(byte[] imgByteArray) throws IOException {
 
     try (ImageAnnotatorClient vision = ImageAnnotatorClient.create()) {
         ByteString imgBytes = ByteString.copyFrom(imgByteArray);
@@ -270,7 +309,7 @@ public class GmailImageAnalyzerAndLabeller {
         return animals;
     }
 
-    public static void main(String... args) throws IOException, GeneralSecurityException {
+    public static void main(String... args) throws Exception {
         // Build a new authorized API client service.
         final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
         Gmail service = new Gmail.Builder(HTTP_TRANSPORT, JSON_FACTORY, getCredentials(HTTP_TRANSPORT))
@@ -297,30 +336,38 @@ public class GmailImageAnalyzerAndLabeller {
             List<byte[]> imageByteArrays = getAttachmentsBytes(service, user, message.getId());
 
             for (byte[] imageByteArray:imageByteArrays) {
-                System.out.println("Analyzing attachment!");
+                System.out.println("Analyzing attachment for labels!");
                 // Analyze attachment (google vision)
-                List<EntityAnnotation> annotations = AnnotateImageWithGoogleVision(imageByteArray);
+                List<EntityAnnotation> annotations = annotateImageWithGoogleVision(imageByteArray);
                 for(EntityAnnotation annotation : annotations) {
                     System.out.println(annotation.toString());
                 }
 
                 // is any of the labels an animal!?
                 // check against the list of animals!
-                List<String> animalLabels = new ArrayList<>();
+                List<String> labels = new ArrayList<>();
                 List<EntityAnnotation> animalAnnotations = getAnimalAnnotations(annotations);
+
                 if(animalAnnotations!= null) {
-                    for (EntityAnnotation annotation: animalAnnotations){
-                        animalLabels.add(annotation.getDescription());
+                    for (EntityAnnotation annotation: animalAnnotations) {
+                        labels.add(annotation.getDescription());
                         System.out.println("Spotted a " + annotation.getDescription() +"!");
                     }
-                    labelEmailAndMarkAsProcessed(service, user, message.getId(), animalLabels);
                 } else {
                     // no animals found :(
                     // take the highest scoring label
-                    List<String> labels = new ArrayList<>();
                     labels.add(getHighestScoringAnnotation(annotations).getDescription());
-                    labelEmailAndMarkAsProcessed(service, user, message.getId(), labels);
                 }
+
+                System.out.println("Analyzing attachment for objects!");
+                List<LocalizedObjectAnnotation> objectAnnotations = detectLocalizedObjects(imageByteArray);
+                for(LocalizedObjectAnnotation annotation : objectAnnotations) {
+                    System.out.println(annotation.toString());
+                    labels.add(annotation.getName());
+                }
+
+                labelEmailAndMarkAsProcessed(service, user, message.getId(), labels);
+
             }
         }
     }
