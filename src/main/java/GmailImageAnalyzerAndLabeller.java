@@ -328,7 +328,9 @@ public class GmailImageAnalyzerAndLabeller {
                         .concat(" AND NOT label:\"").concat(ANALYZED_PARENT_LABEL).concat("\"")
                 );
 
-        System.out.println("Number of messages fetched: " + messages.size());
+        if(!messages.isEmpty()) {
+            System.out.println("Number of messages fetched: " + messages.size());
+        }
         // Process emails
         for (Message message : messages) {
             // download attachment
