@@ -127,7 +127,7 @@ public class GmailImageAnalyzerAndLabeller {
      * @return List<EntityAnnotation> annotations of the analyzed image
      */
     public static List<LocalizedObjectAnnotation> detectLocalizedObjects(byte[] imgByteArray)
-            throws Exception, IOException {
+            throws IOException {
         List<AnnotateImageRequest> requests = new ArrayList<>();
 
         ByteString imgBytes = ByteString.copyFrom(imgByteArray);
@@ -145,13 +145,6 @@ public class GmailImageAnalyzerAndLabeller {
             BatchAnnotateImagesResponse response = client.batchAnnotateImages(requests);
             List<AnnotateImageResponse> responses = response.getResponsesList();
 
-            // get first response (only sent in one image in the batch so should only be one response)
-            // Possible to do is to handle emails with several image attachments.
-            AnnotateImageResponse res = responses.get(0);
-
-            if (res.hasError()) {
-                System.out.printf("Error: %s\n", res.getError().getMessage());
-            }
 
             // Display the results
             for (AnnotateImageResponse resu : responses) {
@@ -161,8 +154,14 @@ public class GmailImageAnalyzerAndLabeller {
                 }
             }
 
-            return res.getLocalizedObjectAnnotationsList();
+            // get first response (only sent in one image in the batch so should only be one response)
+            // Possible to do is to handle emails with several image attachments.
+            AnnotateImageResponse res = responses.get(0);
 
+            if (res.hasError()) {
+                System.out.printf("Error: %s\n", res.getError().getMessage());
+            }
+            return res.getLocalizedObjectAnnotationsList();
         }
     }
     public static List<EntityAnnotation> annotateImageWithGoogleVision(byte[] imgByteArray) throws IOException {
