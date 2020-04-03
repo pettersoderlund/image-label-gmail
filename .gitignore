@@ -1,3 +1,4 @@
 /src/main/resources/credentials.json
 /target/
 /tokens/StoredCredential
+.DS_Store	
