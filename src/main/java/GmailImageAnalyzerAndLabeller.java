@@ -28,6 +28,7 @@ import com.google.protobuf.ByteString;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Logger;
 
 // Imports the Google Cloud client library
 
@@ -44,10 +45,12 @@ public class GmailImageAnalyzerAndLabeller {
     private static final List<String> SCOPES = ImmutableList.of(GmailScopes.GMAIL_LABELS, GmailScopes.GMAIL_MODIFY);
     private static final String CREDENTIALS_FILE_PATH = "/credentials.json";
     private static final String ANIMALS_FILE_PATH = "animals.csv";
+    private final static Logger LOGGER = Logger.getLogger(GmailImageAnalyzerAndLabeller.class.getName());
 
 
     /**
      * Creates an authorized Credential object.
+     *
      * @param HTTP_TRANSPORT The network HTTP Transport.
      * @return An authorized Credential object.
      * @throws IOException If the credentials.json file cannot be found.
@@ -75,9 +78,9 @@ public class GmailImageAnalyzerAndLabeller {
      * List all Messages of the user's mailbox matching the query.
      *
      * @param service Authorized Gmail API instance.
-     * @param userId User's email address. The special value "me"
-     * can be used to indicate the authenticated user.
-     * @param query String used to filter the Messages listed.
+     * @param userId  User's email address. The special value "me"
+     *                can be used to indicate the authenticated user.
+     * @param query   String used to filter the Messages listed.
      * @throws IOException
      */
     public static List<Message> listMessagesMatchingQuery(Gmail service, String userId,
@@ -118,13 +121,14 @@ public class GmailImageAnalyzerAndLabeller {
         }
         return attachmentImageByteArrays;
     }
+
     /**
      * Detects localized objects in the specified local image.
      *
      * @param imgByteArray
-     * @throws Exception on errors while closing the client.
-     * @throws IOException on Input/Output errors.
      * @return List<EntityAnnotation> annotations of the analyzed image
+     * @throws Exception   on errors while closing the client.
+     * @throws IOException on Input/Output errors.
      */
     public static List<LocalizedObjectAnnotation> detectLocalizedObjects(byte[] imgByteArray)
             throws IOException {
@@ -149,8 +153,8 @@ public class GmailImageAnalyzerAndLabeller {
             // Display the results
             for (AnnotateImageResponse resu : responses) {
                 for (LocalizedObjectAnnotation entity : resu.getLocalizedObjectAnnotationsList()) {
-                    System.out.println("Object name: " + entity.getName());
-                    System.out.println("Confidence: " + entity.getScore());
+                    LOGGER.info("Object name: " + entity.getName());
+                    LOGGER.info("Confidence: " + entity.getScore());
                 }
             }
 
@@ -159,49 +163,51 @@ public class GmailImageAnalyzerAndLabeller {
             AnnotateImageResponse res = responses.get(0);
 
             if (res.hasError()) {
-                System.out.printf("Error: %s\n", res.getError().getMessage());
+                LOGGER.severe("Error: " + res.getError().getMessage());
             }
             return res.getLocalizedObjectAnnotationsList();
         }
     }
+
     public static List<EntityAnnotation> annotateImageWithGoogleVision(byte[] imgByteArray) throws IOException {
 
-    try (ImageAnnotatorClient vision = ImageAnnotatorClient.create()) {
-        ByteString imgBytes = ByteString.copyFrom(imgByteArray);
+        try (ImageAnnotatorClient vision = ImageAnnotatorClient.create()) {
+            ByteString imgBytes = ByteString.copyFrom(imgByteArray);
 
-        // Builds the image annotation request
-        List<AnnotateImageRequest> requests = new ArrayList<>();
-        Image img = Image.newBuilder().setContent(imgBytes).build();
-        Feature feat = Feature.newBuilder().setType(Type.LABEL_DETECTION).build();
-        AnnotateImageRequest request = AnnotateImageRequest.newBuilder()
-                .addFeatures(feat)
-                .setImage(img)
-                .build();
-        requests.add(request);
+            // Builds the image annotation request
+            List<AnnotateImageRequest> requests = new ArrayList<>();
+            Image img = Image.newBuilder().setContent(imgBytes).build();
+            Feature feat = Feature.newBuilder().setType(Type.LABEL_DETECTION).build();
+            AnnotateImageRequest request = AnnotateImageRequest.newBuilder()
+                    .addFeatures(feat)
+                    .setImage(img)
+                    .build();
+            requests.add(request);
 
-        // Performs label detection on the image file
-        BatchAnnotateImagesResponse response = vision.batchAnnotateImages(requests);
-        List<AnnotateImageResponse> responses = response.getResponsesList();
+            // Performs label detection on the image file
+            BatchAnnotateImagesResponse response = vision.batchAnnotateImages(requests);
+            List<AnnotateImageResponse> responses = response.getResponsesList();
 
-        // get first response (only sent in one image in the batch so should only be one response)
-        // Possible to do is to handle emails with several image attachments.
-        AnnotateImageResponse res = responses.get(0);
+            // get first response (only sent in one image in the batch so should only be one response)
+            // Possible to do is to handle emails with several image attachments.
+            AnnotateImageResponse res = responses.get(0);
 
-        if (res.hasError()) {
-            System.out.printf("Error: %s\n", res.getError().getMessage());
+            if (res.hasError()) {
+                LOGGER.severe("Error: " + res.getError().getMessage());
+            }
+
+            return res.getLabelAnnotationsList();
         }
-
-        return res.getLabelAnnotationsList();
-    }}
+    }
 
     /**
      * Modify the labels a message is associated with.
      *
-     * @param service Authorized Gmail API instance.
-     * @param userId User's email address. The special value "me"
-     * can be used to indicate the authenticated user.
-     * @param messageId ID of Message to Modify.
-     * @param labelsToAdd List of label ids to add.
+     * @param service        Authorized Gmail API instance.
+     * @param userId         User's email address. The special value "me"
+     *                       can be used to indicate the authenticated user.
+     * @param messageId      ID of Message to Modify.
+     * @param labelsToAdd    List of label ids to add.
      * @param labelsToRemove List of label ids to remove.
      * @throws IOException
      */
@@ -212,12 +218,12 @@ public class GmailImageAnalyzerAndLabeller {
         Message message = service.users().messages().modify(userId, messageId, mods).execute();
     }
 
-     /**
+    /**
      * List the Labels in the user's mailbox.
      *
      * @param service Authorized Gmail API instance.
-     * @param userId User's email address. The special value "me"
-     * can be used to indicate the authenticated user.
+     * @param userId  User's email address. The special value "me"
+     *                can be used to indicate the authenticated user.
      * @throws IOException
      */
     public static List<Label> listLabels(Gmail service, String userId) throws IOException {
@@ -230,9 +236,9 @@ public class GmailImageAnalyzerAndLabeller {
     /**
      * Add a new Label to user's inbox.
      *
-     * @param service Authorized Gmail API instance.
-     * @param userId User's email address. The special value "me"
-     * can be used to indicate the authenticated user.
+     * @param service      Authorized Gmail API instance.
+     * @param userId       User's email address. The special value "me"
+     *                     can be used to indicate the authenticated user.
      * @param newLabelName Name of the new label.
      * @throws IOException
      */
@@ -254,7 +260,7 @@ public class GmailImageAnalyzerAndLabeller {
         List<Label> labelsInAccount = listLabels(service, userId);
         // See if the label name exists
         for (Label label : labelsInAccount) {
-            if(label.getName().equals(labelName)){
+            if (label.getName().equals(labelName)) {
                 return label;
             }
         }
@@ -269,7 +275,7 @@ public class GmailImageAnalyzerAndLabeller {
         for (String labelNameToAdd : labelNamesToAddToEmail) {
             // add labels as children under parent label
             labelIdsToAdd.add(getLabelByName(service, userId,
-                    ANALYZED_PARENT_LABEL+"/"+labelNameToAdd).getId());
+                    ANALYZED_PARENT_LABEL + "/" + labelNameToAdd).getId());
         }
 
         // always add the "analyzed parent label"
@@ -278,12 +284,12 @@ public class GmailImageAnalyzerAndLabeller {
         modifyMessage(service, userId, emailId, labelIdsToAdd, null);
     }
 
-    public static EntityAnnotation getHighestScoringAnnotation(List<EntityAnnotation> annotations){
+    public static EntityAnnotation getHighestScoringAnnotation(List<EntityAnnotation> annotations) {
         double highestScore = 0;
         EntityAnnotation highestScoredAnnotation = null;
-        if(!annotations.isEmpty()) {
+        if (!annotations.isEmpty()) {
             for (EntityAnnotation annotation : annotations) {
-                if (annotation.getScore() > highestScore){
+                if (annotation.getScore() > highestScore) {
                     highestScoredAnnotation = annotation;
                     highestScore = annotation.getScore();
                 }
@@ -294,7 +300,7 @@ public class GmailImageAnalyzerAndLabeller {
 
     public static List<String> getListOfAnimals() throws IOException {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        InputStream inputStream= classLoader.getResourceAsStream(ANIMALS_FILE_PATH);
+        InputStream inputStream = classLoader.getResourceAsStream(ANIMALS_FILE_PATH);
         Reader inputStreamReader = new InputStreamReader(inputStream);
         BufferedReader csvReader = new BufferedReader(inputStreamReader);
 
@@ -324,24 +330,24 @@ public class GmailImageAnalyzerAndLabeller {
 
 
         List<Message> messages = listMessagesMatchingQuery(service, user, gmailSearchString
-                        .concat(" AND NOT label:\"").concat(ANALYZED_PARENT_LABEL).concat("\"")
-                );
+                .concat(" AND NOT label:\"").concat(ANALYZED_PARENT_LABEL).concat("\"")
+        );
 
-        if(!messages.isEmpty()) {
-            System.out.println("Number of messages fetched: " + messages.size());
+        if (!messages.isEmpty()) {
+            LOGGER.info("Number of messages fetched: " + messages.size());
         }
         // Process emails
         for (Message message : messages) {
             // download attachment
-            System.out.println("Downloading attachment!");
+            LOGGER.info("Downloading attachment!");
             List<byte[]> imageByteArrays = getAttachmentsBytes(service, user, message.getId());
 
-            for (byte[] imageByteArray:imageByteArrays) {
-                System.out.println("Analyzing attachment for labels!");
+            for (byte[] imageByteArray : imageByteArrays) {
+                LOGGER.info("Analyzing attachment for labels!");
                 // Analyze attachment (google vision)
                 List<EntityAnnotation> annotations = annotateImageWithGoogleVision(imageByteArray);
-                for(EntityAnnotation annotation : annotations) {
-                    System.out.println(annotation.toString());
+                for (EntityAnnotation annotation : annotations) {
+                    LOGGER.info(annotation.toString());
                 }
 
                 // is any of the labels an animal!?
@@ -349,10 +355,10 @@ public class GmailImageAnalyzerAndLabeller {
                 List<String> labels = new ArrayList<>();
                 List<EntityAnnotation> animalAnnotations = getAnimalAnnotations(annotations);
 
-                if(animalAnnotations!= null) {
-                    for (EntityAnnotation annotation: animalAnnotations) {
+                if (animalAnnotations != null) {
+                    for (EntityAnnotation annotation : animalAnnotations) {
                         labels.add(annotation.getDescription());
-                        System.out.println("Spotted a " + annotation.getDescription() +"!");
+                        LOGGER.info("Spotted a " + annotation.getDescription() + "!");
                     }
                 } else {
                     // no animals found :(
@@ -360,10 +366,10 @@ public class GmailImageAnalyzerAndLabeller {
                     labels.add(getHighestScoringAnnotation(annotations).getDescription());
                 }
 
-                System.out.println("Analyzing attachment for objects!");
+                LOGGER.info("Analyzing attachment for objects!");
                 List<LocalizedObjectAnnotation> objectAnnotations = detectLocalizedObjects(imageByteArray);
-                for(LocalizedObjectAnnotation annotation : objectAnnotations) {
-                    System.out.println(annotation.toString());
+                for (LocalizedObjectAnnotation annotation : objectAnnotations) {
+                    LOGGER.info(annotation.toString());
                     labels.add(annotation.getName());
                 }
 
@@ -376,8 +382,8 @@ public class GmailImageAnalyzerAndLabeller {
     private static List<EntityAnnotation> getAnimalAnnotations(List<EntityAnnotation> annotations) throws IOException {
         List<EntityAnnotation> animalAnnotations = new ArrayList<>();
 
-        for(EntityAnnotation annotation : annotations) {
-            if(isAnimal(annotation.getDescription())){
+        for (EntityAnnotation annotation : annotations) {
+            if (isAnimal(annotation.getDescription())) {
                 animalAnnotations.add(annotation);
             }
         }
