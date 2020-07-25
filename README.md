@@ -30,6 +30,9 @@ Resulting jar pops out in target/GmailImageAnalyzerAndLabeller.jar
 
 Finished! the program should run. 
 
+## Renewing tokens 
+The stored credentials for the Gmail connection expires after 6 months.
+
 ## Running with saved token (running consequent times after first)
 Make sure tokens folder is in the same dir as current dir. 
 
