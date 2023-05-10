@@ -1,4 +1,8 @@
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import javax.imageio.ImageIO;
@@ -9,6 +13,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.security.GeneralSecurityException;
 
 class GmailImageAnalyzerAndLabellerTest {
 
@@ -79,4 +84,11 @@ class GmailImageAnalyzerAndLabellerTest {
         byte [] data = baos.toByteArray();
         Assertions.assertEquals("Cat", GmailImageAnalyzerAndLabeller.detectLocalizedObjects(data).get(0).getName());
     }
+
+    @Test
+    void testGetCredentials() throws GeneralSecurityException, IOException {
+        final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
+        Assertions.assertNotNull(GmailImageAnalyzerAndLabeller.getCredentials(HTTP_TRANSPORT));
+    }
+
 }
